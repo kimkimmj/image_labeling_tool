@@ -29,7 +29,7 @@ def request_browser_origin(request: Request) -> str | None:
     return None
 
 
-def pick_oauth_redirect_uri(request: Request, provider: OAuthProvider) -> str:
+def get_oauth_redirect_uri(request: Request, provider: OAuthProvider) -> str:
     """환경 변수에 등록한 OAuth 콜백 URI를 그대로 사용한다.
 
     Google은 인가 요청과 콘솔 등록 URI가 문자 단위로 일치해야 하므로,

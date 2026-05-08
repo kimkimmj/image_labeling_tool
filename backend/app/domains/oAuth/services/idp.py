@@ -109,7 +109,7 @@ class OAuthIdpClient:
             raise OAuthExchangeError(str(exc)) from exc
         raise OAuthExchangeError("unsupported provider")
 
-    def is_provider_configured(self, provider: OAuthProvider) -> bool:
+    def has_provider_configured(self, provider: OAuthProvider) -> bool:
         """환경 변수에 해당 IdP 클라이언트 설정이 있는지 확인한다.
 
         로그인 라우트에서 미설정 시 503을 내기 위해 호출한다.

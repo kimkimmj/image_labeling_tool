@@ -15,7 +15,7 @@ from app.models.enums import OAuthProvider
 
 
 def parse_oauth_provider(provider: str) -> OAuthProvider:
-    """경로 변수 문자열을 OAuthProvider 열거형으로 파싱한다.
+    """경로 변수 문자열을 OAuthProvider 열거(Enum)형으로 반환한다.
 
     알 수 없는 값이면 404를 위한 HTTPException을 발생시키므로 라우터에서 그대로 사용한다.
     """

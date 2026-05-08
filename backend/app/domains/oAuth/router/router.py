@@ -24,7 +24,7 @@ from app.domains.oAuth.services.exceptions import (
 )
 from app.domains.oAuth.oauth_flow_cookie_parse import oauth_flow_payload_from_request
 from app.domains.oAuth.oauth_redirect import (
-    pick_oauth_redirect_uri,
+    get_oauth_redirect_uri,
 )
 from app.domains.oAuth.services.idp import OAuthIdpClient
 from app.domains.oAuth.services.login_service import OAuthCookiePayload, OAuthLoginService
@@ -44,12 +44,13 @@ def oauth_login(
 ) -> RedirectResponse:
     """브라우저를 IdP 인가 페이지로 보내고 state/PKCE 쿠키를 심는다."""
     p = parse_oauth_provider(provider)
-    if not idp_client.is_provider_configured(p):
+    # oauth provider의 설정값이 있는지 확인
+    if not idp_client.has_provider_configured(p):
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="OAuth provider not configured",
         )
-    redirect_uri = pick_oauth_redirect_uri(request, p)
+    redirect_uri = get_oauth_redirect_uri(request, p)
     url, state, verifier = oauth_svc.build_oauth_login_url(p, redirect_uri=redirect_uri)
     response = RedirectResponse(url=url, status_code=302)
     flow_cookies.set_flow_cookies(

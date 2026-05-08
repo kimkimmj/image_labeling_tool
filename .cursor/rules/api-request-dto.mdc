@@ -1,0 +1,80 @@
+---
+description: API 요청(Query/Path/Body) 파라미터는 DTO(Pydantic)로 수신
+alwaysApply: true
+---
+
+# API 요청 파라미터 DTO 규칙
+
+FastAPI 엔드포인트에서 `query`, `path`, `body` 파라미터는 DTO(Pydantic 모델)로 받는다.
+
+## 목적
+
+- 요청 검증 규칙을 라우터 시그니처에서 분리해 재사용 가능하게 만든다.
+- 입력 계약(contract)을 명확히 하여 API 변경 시 영향 범위를 줄인다.
+- 라우터를 얇게 유지하고 비즈니스 로직 진입 전에 입력 정합성을 보장한다.
+
+## 필수 규칙
+
+- `query` 파라미터는 `BaseModel` DTO로 정의한다.
+- `path` 파라미터도 DTO로 정의한다.
+- `body` 파라미터는 DTO로 정의한다.
+- 라우터 함수 인자에 원시 타입(`str`, `int`, `bool` 등)을 다수 나열하지 않는다.
+- 검증/제약(`ge`, `le`, `min_length`, 정규식 등)은 DTO 필드에 선언한다.
+- 서비스 레이어에는 DTO 또는 DTO에서 변환한 명시적 커맨드 객체를 전달한다.
+
+## 권장 패턴
+
+```python
+from fastapi import APIRouter, Depends
+from pydantic import BaseModel, Field
+
+router = APIRouter()
+
+
+class DatasetPathDTO(BaseModel):
+    dataset_id: int = Field(..., ge=1)
+
+
+class AnnotationQueryDTO(BaseModel):
+    status: str | None = None
+    page: int = Field(1, ge=1)
+    size: int = Field(20, ge=1, le=200)
+
+
+class CreateAnnotationBodyDTO(BaseModel):
+    image_id: int = Field(..., ge=1)
+    label_id: int = Field(..., ge=1)
+    x: float
+    y: float
+    w: float = Field(..., gt=0)
+    h: float = Field(..., gt=0)
+
+
+@router.post("/datasets/{dataset_id}/annotations")
+def create_annotation(
+    path: DatasetPathDTO = Depends(),
+    query: AnnotationQueryDTO = Depends(),
+    body: CreateAnnotationBodyDTO = ...,
+):
+    ...
+```
+
+## 금지 패턴
+
+```python
+@router.post("/datasets/{dataset_id}/annotations")
+def create_annotation(
+    dataset_id: int,
+    status: str | None = None,
+    page: int = 1,
+    size: int = 20,
+    image_id: int = Body(...),
+    label_id: int = Body(...),
+):
+    ...
+```
+
+## 예외
+
+- 헬스체크/리다이렉트 등 초단순 엔드포인트(파라미터 0~1개)는 원시 타입을 허용할 수 있다.
+- 단, 도메인 로직 진입 API는 반드시 DTO를 사용한다.
