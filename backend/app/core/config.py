@@ -35,9 +35,13 @@ class Settings(BaseSettings):
     oauth_state_cookie_name: str = "ilt_oauth_state"
     oauth_redirect_uri_cookie_name: str = "ilt_oauth_redirect_uri"
     oauth_flow_cookie_name: str = "ilt_oauth_flow"
-    oauth_cookie_max_age_seconds: int = 600
+    oauth_cookie_max_age_seconds: int = 1800
 
     oauth_success_redirect_url: str = "http://localhost:5173/"
+
+    public_app_url: str = "http://localhost:5173"
+    invite_link_ttl_seconds: int = 600
+    invite_join_path: str = "/join"
 
     oauth_google_client_id: str = ""
     oauth_google_client_secret: str = ""

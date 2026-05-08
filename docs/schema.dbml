@@ -7,6 +7,18 @@ Enum project_role {
   annotator
 }
 
+Enum project_invitation_role {
+  annotator
+  reviewer
+}
+
+Enum invitation_status {
+  pending
+  accepted
+  expired
+  cancelled
+}
+
 Enum upload_type {
   image_zip
   video
@@ -111,6 +123,26 @@ Table project_users {
     project_id [name: 'idx_project_users_project']
     user_id [name: 'idx_project_users_user']
   }
+}
+
+Table project_invitations {
+  id bigint [pk, increment]
+  project_id bigint [not null, note: 'FK projects ON DELETE CASCADE']
+  role project_invitation_role [not null]
+  token_hash text [not null]
+  status invitation_status [not null]
+  invited_by bigint [not null, note: 'FK users']
+  accepted_by bigint [note: 'FK users ON DELETE SET NULL']
+  accepted_at timestamp
+  expires_at timestamp [not null]
+  created_at timestamp [not null, default: `now()`]
+
+  indexes {
+    token_hash [unique, name: 'uq_project_invitations_token_hash']
+    (project_id, status) [name: 'idx_project_invitations_project_status']
+  }
+
+  Note: 'CHECK expires_at > created_at'
 }
 
 Table project_classes {
@@ -315,6 +347,10 @@ Ref: projects.selected_model_id > ml_models.id
 Ref: project_users.project_id > projects.id [delete: cascade]
 Ref: project_users.user_id > users.id
 Ref: project_users.invited_by > users.id
+
+Ref: project_invitations.project_id > projects.id [delete: cascade]
+Ref: project_invitations.invited_by > users.id
+Ref: project_invitations.accepted_by > users.id
 
 Ref: project_classes.project_id > projects.id [delete: cascade]
 Ref: project_classes.model_class_id > model_classes.id

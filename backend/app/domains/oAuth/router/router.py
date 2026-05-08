@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse
 
@@ -30,8 +32,11 @@ from app.domains.oAuth.services.idp import OAuthIdpClient
 from app.domains.oAuth.services.login_service import OAuthCookiePayload, OAuthLoginService
 from app.domains.oAuth.services.session_service import SessionService
 from app.models import User
+from app.models.enums import OAuthProvider
 
 router = APIRouter(tags=["auth"])
+
+_logger = logging.getLogger(__name__)
 
 
 @router.get("/auth/oauth/{provider}/login")
@@ -51,6 +56,11 @@ def oauth_login(
             detail="OAuth provider not configured",
         )
     redirect_uri = get_oauth_redirect_uri(request, p)
+    if p == OAuthProvider.google:
+        _logger.info(
+            "Google OAuth: redirect_uri=%s — Google Cloud Console에 이 문자열을 그대로 등록하세요.",
+            redirect_uri,
+        )
     url, state, verifier = oauth_svc.build_oauth_login_url(p, redirect_uri=redirect_uri)
     response = RedirectResponse(url=url, status_code=302)
     flow_cookies.set_flow_cookies(
@@ -84,16 +94,20 @@ def oauth_callback(
             payload=payload,
         )
     except OAuthInvalidStateError as exc:
+        msg = str(exc) or "invalid oauth state"
+        _logger.warning("oauth google callback invalid state: %s", msg)
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
-            detail=str(exc) or "invalid oauth state",
+            detail=msg,
         ) from exc
     except OAuthEmailMissingError as exc:
+        _logger.warning("oauth google callback missing email")
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
             detail="email required from identity provider",
         ) from exc
     except OAuthExchangeError as exc:
+        _logger.warning("oauth google token exchange failed: %s", exc)
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except EmailConflictError as exc:
         raise HTTPException(

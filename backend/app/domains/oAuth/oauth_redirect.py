@@ -14,6 +14,42 @@ _CALLBACK_SUFFIX: dict[OAuthProvider, str] = {
 }
 
 
+def google_oauth_redirect_variants() -> frozenset[str]:
+    """Google 콜백 URL 후보(127.0.0.1 ↔ localhost). 둘 다 IdP 콘솔에 등록해야 한다."""
+    primary = (settings.oauth_google_redirect_uri or "").strip()
+    if not primary:
+        return frozenset()
+    out: set[str] = {primary}
+    if "127.0.0.1" in primary:
+        out.add(primary.replace("127.0.0.1", "localhost", 1))
+    elif "localhost" in primary:
+        out.add(primary.replace("localhost", "127.0.0.1", 1))
+    return frozenset(out)
+
+
+def pick_google_redirect_uri(request: Request) -> str:
+    """로그인 요청의 Origin/Referer에 맞춰 localhost vs 127.0.0.1 콜백을 고른다.
+
+    브라우저는 호스트별로 쿠키를 분리하므로, 프론트를 localhost로 열었는데 콜백만 127.0.0.1이면
+    PKCE/state 쿠키가 콜백 요청에 실리지 않는다.
+    """
+    variants = sorted(google_oauth_redirect_variants())
+    if not variants:
+        return settings.oauth_google_redirect_uri
+    origin = (request.headers.get("origin") or "").lower()
+    referer = (request.headers.get("referer") or "").lower()
+    blob = f"{origin} {referer}"
+    if "localhost" in blob:
+        for v in variants:
+            if "localhost" in v:
+                return v
+    if "127.0.0.1" in blob:
+        for v in variants:
+            if "127.0.0.1" in v:
+                return v
+    return variants[0]
+
+
 def default_oauth_redirect_uri(provider: OAuthProvider) -> str:
     """환경 변수에 정의된 해당 IdP 기본 콜백 URL."""
     if provider == OAuthProvider.google:
@@ -30,11 +66,12 @@ def request_browser_origin(request: Request) -> str | None:
 
 
 def get_oauth_redirect_uri(request: Request, provider: OAuthProvider) -> str:
-    """환경 변수에 등록한 OAuth 콜백 URI를 그대로 사용한다.
+    """IdP에 넘길 redirect_uri. Google은 로그인 시작 페이지 호스트와 맞추기 위해 localhost / 127.0.0.1 을 고른다.
 
-    Google은 인가 요청과 콘솔 등록 URI가 문자 단위로 일치해야 하므로,
-    브라우저 출처로 URI를 동적으로 바꾸지 않는다.
+    Google Cloud Console에는 `google_oauth_redirect_variants()`에 나오는 URI를 모두 등록해야 한다.
     """
+    if provider == OAuthProvider.google:
+        return pick_google_redirect_uri(request)
     _ = request
     return default_oauth_redirect_uri(provider)
 
@@ -54,4 +91,5 @@ def is_trusted_oauth_redirect_uri(uri: str) -> bool:
         settings.oauth_naver_redirect_uri,
         settings.oauth_kakao_redirect_uri,
     }
+    trusted |= google_oauth_redirect_variants()
     return u in trusted

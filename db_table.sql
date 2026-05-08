@@ -8,6 +8,18 @@ CREATE TYPE project_role AS ENUM (
   'annotator'
 );
 
+CREATE TYPE project_invitation_role AS ENUM (
+  'annotator',
+  'reviewer'
+);
+
+CREATE TYPE invitation_status AS ENUM (
+  'pending',
+  'accepted',
+  'expired',
+  'cancelled'
+);
+
 CREATE TYPE upload_type AS ENUM (
   'image_zip',
   'video'
@@ -145,6 +157,37 @@ CREATE TABLE project_users (
   CONSTRAINT uq_project_user
     UNIQUE(project_id, user_id)
 );
+
+CREATE TABLE project_invitations (
+  id BIGSERIAL PRIMARY KEY,
+
+  project_id BIGINT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+
+  role project_invitation_role NOT NULL,
+
+  token_hash TEXT NOT NULL,
+
+  status invitation_status NOT NULL,
+
+  invited_by BIGINT NOT NULL REFERENCES users(id),
+
+  accepted_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
+
+  accepted_at TIMESTAMP,
+
+  expires_at TIMESTAMP NOT NULL,
+
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+
+  CONSTRAINT uq_project_invitations_token_hash
+    UNIQUE(token_hash),
+
+  CONSTRAINT ck_project_invitations_expires_after_created
+    CHECK (expires_at > created_at)
+);
+
+CREATE INDEX idx_project_invitations_project_status
+ON project_invitations(project_id, status);
 
 -- =========================================================
 -- PROJECT CLASSES

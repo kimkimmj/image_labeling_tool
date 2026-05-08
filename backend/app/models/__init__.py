@@ -7,6 +7,7 @@ from sqlalchemy.dialects.postgresql import ENUM as PG_ENUM
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.models.project import Project, ProjectInvitation, ProjectUser
 
 oauth_provider_db = PG_ENUM(
     "google",

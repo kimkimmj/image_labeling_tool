@@ -12,11 +12,13 @@ export function HomePage() {
           <p className="eyebrow">대시보드</p>
           <h1>Image Labeling Tool</h1>
           <p className="muted home-lead">
-            로그인되었습니다. STEP 1에서는 사용자·OAuth 세션만 다루며, 프로젝트 등 다른 기능은 이후
-            단계에서 연결합니다.
+            로그인되었습니다. 아래에서 프로젝트·초대 플로우(STEP 1.1)를 확인할 수 있습니다.
           </p>
         </div>
         <div className="page-home__actions">
+          <Link to="/projects" className="btn-secondary">
+            프로젝트
+          </Link>
           <span className="user-chip" title={user?.email}>
             {user?.email}
           </span>
