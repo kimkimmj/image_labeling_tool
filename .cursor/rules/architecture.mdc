@@ -1,0 +1,120 @@
+---
+description: 프로젝트 아키텍처 및 레이어 분리 규칙 (FastAPI + Celery + PostgreSQL + MinIO + Redis)
+alwaysApply: true
+---
+
+# 아키텍처 규칙
+
+전체 구조는 `.cursor/architecture.md` 참고. 모든 코드는 아래 원칙을 따른다.
+
+이 저장소는 **프로덕션 수준의 이미지/영상 라벨링 SaaS**를 대상으로 한다.
+
+## 제품·도메인 불변 규칙
+
+다음 규칙은 설계·스키마·내보내기·마이그레이션 어디에서도 깨지면 안 된다.
+
+- **YOLO 클래스 인덱스 (`export_index`)**: 한 번 할당된 값은 **변경하지 않으며 재사용하지 않는다** (내보내 호환성).
+- **배정**: **이미지(또는 단일 라벨링 단위)당 어노테이터는 1명**이다.
+- **승인된 어노테이션**: 승인(approved) 이후 레코드는 **불변**이다 — 수정 대신 새 버전/새 이력 등 정책에 맞는 흐름만 허용.
+- **데이터셋 버전**: **참조 기반**(reference-based) — 동일 미디어/라벨 데이터를 버전마다 복제하지 않고, 버전은 메타데이터·참조로만 구별한다 (아래「데이터셋 버전」절과 함께 적용).
+
+## 레이어 책임 (백엔드)
+
+도메인 단위 폴더 `domains/<name>/` 아래에 라우터·서비스·리포지토리를 둔다.
+
+- `domains/<name>/router.py` — FastAPI 라우터. 요청 검증, 인증·Depends 조립, 응답 직렬화만 담당. 비즈니스 로직 금지.
+- `domains/<name>/services/` — 해당 도메인 비즈니스 로직, 트랜잭션 경계, 외부 시스템(MinIO, Celery 등) 호출.
+- `domains/<name>/repositories/` — DB 접근(SQLAlchemy 등) 전담. 비즈니스 규칙 금지.
+
+예: STEP 1 기준으로 `domains/oAuth/` — OAuth(IdP·PKCE·`oauth_identities`), Redis 세션, 로그아웃, `/me`. 세션 스토어는 `core/session_store.py` 의 `redis_session_store_from_request`.
+
+최상위 `app/router.py` 에서 도메인 라우터를 묶고 `main.py` 가 `/api` 로 마운트한다. 인증이 필요한 다른 도메인은 `domains/oAuth/deps.py` 의 `get_current_user` 등을 import 한다 (`oAuth` 가 다른 도메인 서비스를 끌어오는 역방향은 피한다).
+
+## 레이어별 구현 규칙
+
+### Router Layer (`domains/<name>/router.py`)
+- `Depends` 기반 DI로 서비스 클래스를 주입한다.
+- 응답 모델은 `response_model`로 명시해 직렬화 계약을 고정한다.
+- 라우터에서 DB 세부 구현/비즈니스 로직을 직접 수행하지 않는다.
+
+### Service Layer
+- 비즈니스 규칙과 유스케이스 흐름을 서비스 클래스에 집중한다.
+- 비즈니스 예외는 서비스 레이어에서 정의/발생시킨다.
+- DB 작업이 2개 이상 연속되면 트랜잭션 경계를 명시적으로 관리한다.
+
+### Repository Layer
+- DB 접근은 Repository 클래스에서만 수행한다.
+- 쿼리는 SQLAlchemy 2.x 스타일(`select(Model).where(...)`)을 사용한다.
+- 복잡한 `JOIN` 쿼리는 의도를 설명하는 짧은 주석을 허용한다.
+
+## db 테이블 구조
+- `/home/corestone/sources/image_labeling_tool/db_table.sql` 를 최우선 참조한다.
+- SQL/SQLAlchemy 코드를 작성하기 전에 스키마, 제약 조건, 인덱스를 반드시 확인한다.
+- DB 스키마 변경은 직접 DDL 수정으로 끝내지 말고 Alembic 마이그레이션으로 버전 관리한다.
+- 스키마 변경 PR에는 Alembic revision(업그레이드/다운그레이드)이 반드시 포함되어야 한다.
+- ER 다이어그램 확인용 DBML은 `/home/corestone/sources/image_labeling_tool/docs/schema.dbml` 에 둔다. [dbdiagram.io](https://dbdiagram.io) 에 붙여 넣거나 해당 파일을 가져와 관계·테이블을 시각적으로 검증한다.
+- Alembic으로 적용 스키마가 바뀌면 **같은 PR**에서 `db_table.sql`(참고 DDL)·`docs/schema.dbml` 을 마이그레이션 결과와 맞게 갱신해, 코드·DB·다이어그램이 한 줄로 맞도록 한다.
+
+### Docker 개발용 Postgres와 동기화
+
+- 로컬 개발 스택의 Postgres는 [`docker-compose.dev.yml`](/home/corestone/sources/image_labeling_tool/docker-compose.dev.yml) 에서 **컨테이너 최초 기동 시** [`db_table.sql`](/home/corestone/sources/image_labeling_tool/db_table.sql) 을 `docker-entrypoint-initdb.d` 로 마운트해 일괄 적용한다.
+- **스키마를 변경한 PR**에서는 반드시 위 경로의 `db_table.sql`(및 Alembic·DBML)을 함께 수정한다. 이미 생성된 Docker 볼륨 위에서는 init 스크립트가 다시 실행되지 않으므로, 변경분을 반영하려면 **`docker compose down -v` 후 재기동**(데이터 초기화)하거나, 동일 DB에 대해 **`alembic upgrade head`** 로 마이그레이션을 적용한다.
+- 에이전트/개발자는 스키마 작업 후 **Docker로 DB를 쓰는 경우 이 두 경로 중 하나로 Postgres가 플랜과 일치하는지** 확인한다.
+
+## 백엔드 구현 원칙
+
+- 백엔드 코드는 OOP 원칙을 준수하며, 클래스 기반으로 작성한다.
+- 책임 분리를 우선하며, 클래스/메서드는 단일 책임 원칙(SRP)을 따른다.
+- 비즈니스 로직은 각 도메인의 `services/` 클래스에 두고, DB 접근은 같은 도메인의 `repositories/` 에 한정한다.
+- 공통 동작은 상속보다 조합(composition)을 우선하고, 필요한 경우에만 상속을 사용한다.
+
+## 파이썬 코딩 컨벤션
+
+- PEP 8을 준수한다.
+- 함수/메서드/클래스에 타입 힌트를 명시한다.
+- 의미 있는 네이밍을 사용하고, 과도한 축약어를 피한다.
+- 복잡한 로직에 한해 짧고 명확한 주석을 추가한다.
+
+## 스키마/검증 규칙 (Pydantic)
+
+- 요청/응답 스키마는 Pydantic 모델로 정의한다.
+- 라우터의 입출력은 Pydantic 스키마를 통해 검증/직렬화한다.
+- 내부 도메인/DB 엔티티와 API 스키마를 분리한다.
+
+## 의존성 방향 (단방향)
+
+`domains/<name>/router` → `domains/<name>/services` → `domains/<name>/repositories`
+
+역방향 import 금지. Repository는 같은 도메인의 Service나 Router를 import하지 않는다.
+
+```python
+# ❌ BAD — 라우터에서 직접 DB 접근
+@router.post("/datasets")
+def create(payload, db: Session = Depends(get_db)):
+    db.add(Dataset(**payload.dict())); db.commit()
+
+# ✅ GOOD — service 경유, repository가 DB 담당
+@router.post("/datasets")
+def create(payload, svc: DatasetService = Depends()):
+    return svc.create(payload)
+```
+
+## 무거운 작업은 Celery로
+
+업로드 처리, ffmpeg 추출, YOLO 추론, 내보내기 생성은 **반드시** Celery 태스크로 위임. FastAPI 핸들러 안에서 동기 실행 금지.
+
+```python
+# ✅ GOOD
+task_id = run_inference.delay(dataset_id).id
+return {"task_id": task_id}
+```
+
+## 저장소 분리
+
+- **파일/바이너리**(원본 영상, 이미지, 내보내기 산출물) → MinIO. PostgreSQL에는 객체 키만 저장.
+- **메타데이터/관계형 데이터**(데이터셋, 라벨, 버전) → PostgreSQL.
+- **작업 큐 상태** → Redis (Celery 브로커/백엔드).
+
+## 데이터셋 버전
+
+데이터셋은 **불변(immutable) 버전 모델**이다. 기존 행을 “수정”하는 대신 **새 버전 레코드**를 만들고, 상위 엔티티의 **참조를 그 버전으로 갱신**한다. 버전 간에 **바이너리·라벨 행을 복제해 중복 저장하지 않는다**(참조만 전환·연결).
