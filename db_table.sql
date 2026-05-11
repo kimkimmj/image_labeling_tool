@@ -71,6 +71,8 @@ CREATE TABLE users (
 
   password_hash TEXT,
 
+  is_admin BOOLEAN NOT NULL DEFAULT FALSE,
+
   created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
@@ -198,7 +200,7 @@ CREATE TABLE project_classes (
 
   project_id BIGINT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
 
-  model_class_id BIGINT REFERENCES model_classes(id),
+  model_class_id BIGINT REFERENCES model_classes(id) ON DELETE SET NULL,
 
   export_index INT NOT NULL,
 

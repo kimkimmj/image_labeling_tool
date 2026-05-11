@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 
 import {
   createProject,
+  deleteProject,
   fetchMemberProjects,
   fetchOwnedProjects,
 } from '../api/projects'
@@ -16,6 +17,11 @@ export function ProjectsPage() {
   const [createName, setCreateName] = useState('')
   const [createDesc, setCreateDesc] = useState('')
   const [creating, setCreating] = useState(false)
+
+  const [ownedDeleteTarget, setOwnedDeleteTarget] = useState<{ id: number; name: string } | null>(null)
+  const [ownedDeleteConfirmName, setOwnedDeleteConfirmName] = useState('')
+  const [ownedDeleteBusy, setOwnedDeleteBusy] = useState(false)
+  const [ownedDeleteError, setOwnedDeleteError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -36,6 +42,30 @@ export function ProjectsPage() {
   useEffect(() => {
     void load()
   }, [load])
+
+  async function handleDeleteOwnedProject(e: React.FormEvent) {
+    e.preventDefault()
+    if (!ownedDeleteTarget || ownedDeleteConfirmName !== ownedDeleteTarget.name) return
+    setOwnedDeleteBusy(true)
+    setOwnedDeleteError(null)
+    try {
+      await deleteProject(ownedDeleteTarget.id, ownedDeleteConfirmName)
+      setOwnedDeleteTarget(null)
+      setOwnedDeleteConfirmName('')
+      await load()
+    } catch (err) {
+      const raw = err instanceof Error ? err.message : '삭제 실패'
+      let msg = raw
+      if (raw.includes('project_delete_name_mismatch')) msg = '프로젝트 이름이 일치하지 않습니다.'
+      else if (raw.includes('project_has_active_uploads'))
+        msg = '처리 중인 ZIP 업로드가 있을 때는 삭제할 수 없습니다. 완료·실패 후 다시 시도하세요.'
+      else if (raw.includes('project_storage_purge_failed') || raw.startsWith('HTTP 503'))
+        msg = '파일 저장소 정리에 실패했습니다. 잠시 후 다시 시도하세요. 프로젝트 데이터는 그대로입니다.'
+      setOwnedDeleteError(msg)
+    } finally {
+      setOwnedDeleteBusy(false)
+    }
+  }
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault()
@@ -112,7 +142,12 @@ export function ProjectsPage() {
       ) : (
         <>
           <section className="panel panel--spaced">
-            <h2>내가 owner인 프로젝트</h2>
+            <div className="projects-section-head">
+              <h2>내가 owner인 프로젝트</h2>
+              <Link to="/models" className="btn-secondary">
+                모델 관리
+              </Link>
+            </div>
             <p className="muted fine-muted">초대 링크 생성·멤버 보기는 상세에서.</p>
             <ul className="link-list">
               {owned?.length === 0 ? (
@@ -120,10 +155,67 @@ export function ProjectsPage() {
               ) : (
                 owned?.map((p) => (
                   <li key={p.id}>
-                    <Link to={`/projects/${p.id}`} className="inline-link">
-                      {p.name}
-                    </Link>
-                    <span className="muted list-meta"> · #{p.id}</span>
+                    <div
+                      style={{
+                        display: 'flex',
+                        flexWrap: 'wrap',
+                        alignItems: 'center',
+                        gap: '8px',
+                      }}
+                    >
+                      <Link to={`/projects/${p.id}`} className="inline-link">
+                        {p.name}
+                      </Link>
+                      <span className="muted list-meta"> · #{p.id}</span>
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        onClick={() => {
+                          setOwnedDeleteError(null)
+                          if (ownedDeleteTarget?.id === p.id) {
+                            setOwnedDeleteTarget(null)
+                            setOwnedDeleteConfirmName('')
+                          } else {
+                            setOwnedDeleteTarget({ id: p.id, name: p.name })
+                            setOwnedDeleteConfirmName('')
+                          }
+                        }}
+                      >
+                        {ownedDeleteTarget?.id === p.id ? '취소' : '삭제'}
+                      </button>
+                    </div>
+                    {ownedDeleteTarget?.id === p.id ? (
+                      <form
+                        onSubmit={(e) => void handleDeleteOwnedProject(e)}
+                        className="form-stack"
+                        style={{ marginTop: 10 }}
+                      >
+                        <label className="form-field">
+                          <span className="form-label fine-muted">
+                            «{p.name}» 이름을 입력하면 영구 삭제됩니다
+                          </span>
+                          <input
+                            className="input-text"
+                            value={ownedDeleteConfirmName}
+                            onChange={(e) => setOwnedDeleteConfirmName(e.target.value)}
+                            placeholder={p.name}
+                            autoComplete="off"
+                          />
+                        </label>
+                        <button
+                          type="submit"
+                          className="btn-danger"
+                          disabled={ownedDeleteBusy || ownedDeleteConfirmName !== p.name}
+                        >
+                          {ownedDeleteBusy ? '삭제 중…' : '영구 삭제'}
+                        </button>
+                        {ownedDeleteError ? (
+                          <p className="banner banner--error" role="alert">
+                            {ownedDeleteError}
+                          </p>
+                        ) : null}
+                      </form>
+                    ) : null}
                   </li>
                 ))
               )}

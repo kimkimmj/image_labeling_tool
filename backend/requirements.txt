@@ -8,4 +8,7 @@ psycopg[binary]
 redis
 celery
 minio
+ultralytics
+python-multipart
+Pillow
 pytest

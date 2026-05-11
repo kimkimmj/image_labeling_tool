@@ -26,6 +26,15 @@ class Settings(BaseSettings):
 
     redis_url: str = "redis://127.0.0.1:6379/0"
 
+    celery_broker_url: str = "redis://127.0.0.1:6379/0"
+    celery_result_backend: str = "redis://127.0.0.1:6379/1"
+
+    minio_endpoint: str = "127.0.0.1:9000"
+    minio_access_key: str = "minio"
+    minio_secret_key: str = "minio123"
+    minio_bucket: str = "ilt-media"
+    minio_secure: bool = False
+
     session_ttl_seconds: int = 60 * 60 * 24 * 7
     session_cookie_name: str = "ilt_session"
     session_cookie_secure: bool = False

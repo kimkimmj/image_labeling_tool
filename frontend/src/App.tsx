@@ -2,11 +2,14 @@ import { useEffect, type ReactNode } from 'react'
 import { Navigate, Route, Routes, useNavigate } from 'react-router-dom'
 
 import { useAuth } from './auth/AuthContext'
+import { ModelsPage } from './pages/ModelsPage'
+import { AnnotationPage } from './pages/AnnotationPage'
 import { HomePage } from './pages/HomePage'
 import { JoinPage } from './pages/JoinPage'
 import { LoginPage } from './pages/LoginPage'
 import { ProjectDetailPage } from './pages/ProjectDetailPage'
 import { ProjectsPage } from './pages/ProjectsPage'
+import { UploadDetailPage } from './pages/UploadDetailPage'
 
 import './App.css'
 
@@ -58,10 +61,34 @@ export default function App() {
       <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route
+        path="/models"
+        element={
+          <ProtectedRoute>
+            <ModelsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/join"
         element={
           <ProtectedRoute>
             <JoinPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/images/:imageId/label"
+        element={
+          <ProtectedRoute>
+            <AnnotationPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/projects/:projectId/uploads/:uploadJobId"
+        element={
+          <ProtectedRoute>
+            <UploadDetailPage />
           </ProtectedRoute>
         }
       />

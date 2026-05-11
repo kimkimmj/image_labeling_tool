@@ -6,6 +6,7 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 from app.core.config import settings
+from app.core.local_dev_origins import is_local_lan_vite_origin
 
 
 _SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
@@ -48,9 +49,12 @@ class CsrfOriginMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
         origin = request.headers.get("origin")
         referer = request.headers.get("referer")
-        if not _origin_allowed(origin, referer, settings.cors_origins):
-            return JSONResponse(
-                {"detail": "origin or referer not allowed"},
-                status_code=403,
-            )
-        return await call_next(request)
+        allowed = settings.cors_origins
+        if _origin_allowed(origin, referer, allowed):
+            return await call_next(request)
+        if settings.app_env == "local" and is_local_lan_vite_origin(origin, referer):
+            return await call_next(request)
+        return JSONResponse(
+            {"detail": "origin or referer not allowed"},
+            status_code=403,
+        )

@@ -1,10 +1,12 @@
 /** `/api` 프록시 + 세션 쿠키. CSRF 완화용으로 브라우저가 Origin/Referer를 붙입니다. */
 export async function apiJson<T>(path: string, init?: RequestInit): Promise<T> {
   const hasBody = init?.body !== undefined && init?.body !== null
+  const isFormData = init?.body instanceof FormData
   const method = (init?.method ?? 'GET').toUpperCase()
   const headers: HeadersInit = {
     Accept: 'application/json',
-    ...(method !== 'GET' && method !== 'HEAD' && hasBody ? { 'Content-Type': 'application/json' } : {}),
+    // FormData 전송 시 브라우저가 Content-Type(boundary 포함)을 자동으로 설정하므로 직접 지정하지 않는다.
+    ...(method !== 'GET' && method !== 'HEAD' && hasBody && !isFormData ? { 'Content-Type': 'application/json' } : {}),
     ...((init?.headers as Record<string, string> | undefined) ?? {}),
   }
 

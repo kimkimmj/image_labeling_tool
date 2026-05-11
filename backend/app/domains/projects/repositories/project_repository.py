@@ -4,6 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import Project, ProjectUser, User
+from app.models.enums import ProjectRole
 
 
 class ProjectRepository:
@@ -87,3 +88,18 @@ class ProjectRepository:
             .order_by(ProjectUser.created_at.asc())
         )
         return list(self._session.execute(stmt).all())
+
+    def get_owner_user_id(self, project_id: int) -> int | None:
+        """프로젝트 owner 멤버의 user_id. 없으면 None."""
+        stmt = select(ProjectUser.user_id).where(
+            ProjectUser.project_id == project_id,
+            ProjectUser.role == ProjectRole.owner.value,
+        )
+        return self._session.scalar(stmt)
+
+    def delete_project(self, project_id: int) -> None:
+        """projects 행을 삭제한다. 없으면 무시. FK CASCADE는 DB에 위임."""
+        row = self._session.get(Project, project_id)
+        if row is not None:
+            self._session.delete(row)
+            self._session.flush()

@@ -42,9 +42,11 @@ class Project(Base):
     name: Mapped[str] = mapped_column(Text, nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"), nullable=False)
-    # DB에는 ml_models FK가 있으나, ORM에 ml_models 테이블이 없을 때 메타데이터 오류를 피하기 위해
-    # 여기서는 FK를 선언하지 않는다. 자동 라벨링(모델 선택) 연동 시 MlModel 매핑 추가 후 맞출 수 있다.
-    selected_model_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    selected_model_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("ml_models.id"),
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=False),
         server_default=func.now(),

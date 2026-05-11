@@ -12,11 +12,16 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.domains.projects.exceptions import (
     InvitationInvalidError,
+    ProjectActiveUploadsError,
+    ProjectDeleteNameMismatchError,
     ProjectForbiddenError,
     ProjectNotFoundError,
+    ProjectStoragePurgeError,
 )
 from app.domains.projects.repositories.invitation_repository import InvitationRepository
 from app.domains.projects.repositories.project_repository import ProjectRepository
+from app.domains.uploads.repositories.upload_repository import UploadRepository
+from app.core.storage import StorageClient
 from app.models.enums import InvitationStatus, ProjectRole
 
 
@@ -134,6 +139,53 @@ class ProjectService:
             created_at=project.created_at,
             my_role=m.role,
         )
+
+    def delete_project_as_owner(
+        self,
+        *,
+        project_id: int,
+        owner_user_id: int,
+        confirm_name: str,
+        storage: StorageClient,
+    ) -> bool:
+        """스토리지 prefix 삭제 후 DB에서 프로젝트를 삭제한다.
+
+        Returns:
+            True if a row was deleted, False if project was already absent (idempotent).
+
+        Raises:
+            ProjectNotFoundError / ProjectForbiddenError
+            ProjectDeleteNameMismatchError
+            ProjectActiveUploadsError
+            ProjectStoragePurgeError
+        """
+        project = self._projects.get_project(project_id)
+        if project is None:
+            return False
+
+        self._owner_membership_or_raise(project_id, owner_user_id)
+
+        if confirm_name != project.name:
+            raise ProjectDeleteNameMismatchError
+
+        uploads = UploadRepository(self._db)
+        if uploads.count_active_upload_jobs(project_id) > 0:
+            raise ProjectActiveUploadsError
+
+        prefix = f"projects/{project_id}/"
+        try:
+            storage.delete_prefix(prefix)
+        except Exception as exc:
+            raise ProjectStoragePurgeError(str(exc)) from exc
+
+        try:
+            self._projects.delete_project(project_id)
+            self._db.commit()
+        except Exception:
+            self._db.rollback()
+            raise
+
+        return True
 
     def list_members(self, project_id: int, user_id: int) -> list[ProjectMemberDTO]:
         self._owner_membership_or_raise(project_id, user_id)

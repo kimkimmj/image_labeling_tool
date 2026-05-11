@@ -18,6 +18,12 @@ class ProjectPathDTO(BaseModel):
     project_id: int = Field(..., ge=1)
 
 
+class DeleteProjectBodyDTO(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    confirm_name: str = Field(..., min_length=1, max_length=500)
+
+
 class CreateInvitationBodyDTO(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -61,3 +67,60 @@ class CreateInvitationResponse(BaseModel):
     token: str
     join_url: str
     expires_at: datetime
+
+
+# ------------------------------------------------------------------
+# Model upload
+# ------------------------------------------------------------------
+
+
+class ClassPathDTO(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    class_id: int = Field(..., ge=1)
+
+
+class MlModelResponse(BaseModel):
+    id: int
+    name: str
+    version: str | None = None
+    framework: str
+    file_path: str
+    created_at: datetime
+
+
+# ------------------------------------------------------------------
+# project_classes
+# ------------------------------------------------------------------
+
+
+class ProjectClassResponse(BaseModel):
+    id: int
+    project_id: int
+    export_index: int
+    name: str
+    color: str | None = None
+    is_active: bool
+    model_class_id: int | None = None
+    created_at: datetime
+
+
+class AddClassBodyDTO(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(..., min_length=1, max_length=200)
+    color: str | None = Field(None, max_length=50)
+
+
+class PatchClassBodyDTO(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = Field(None, min_length=1, max_length=200)
+    color: str | None = Field(None, max_length=50)
+    is_active: bool | None = None
+
+
+class SelectModelBodyDTO(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    model_id: int = Field(..., ge=1)
