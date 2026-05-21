@@ -1,0 +1,10 @@
+# Docker build context = repository root (web 이미지)
+.git
+.github
+backend/.env
+backend/.venv
+frontend/node_modules
+**/__pycache__
+**/.pytest_cache
+*.md
+.cursor

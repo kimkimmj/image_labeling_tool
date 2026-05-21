@@ -10,7 +10,7 @@ celery_app = Celery(
     "ilt_worker",
     broker=settings.celery_broker_url,
     backend=settings.celery_result_backend,
-    include=["app.tasks.upload_tasks"],
+    include=["app.tasks.upload_tasks", "app.tasks.export_tasks"],
 )
 
 celery_app.conf.update(

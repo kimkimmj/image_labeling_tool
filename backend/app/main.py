@@ -43,7 +43,7 @@ def create_app() -> FastAPI:
         cors_kwargs["allow_origin_regex"] = LAN_VITE_ORIGIN_REGEX
     app.add_middleware(CORSMiddleware, **cors_kwargs)
 
-    app.include_router(api_router, prefix="/api")
+    app.include_router(api_router, prefix="/api")  # REST 라우트를 prefix="/api" 아래에 -> nginx /api 로 매핑
 
     return app
 

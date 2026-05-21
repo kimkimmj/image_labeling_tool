@@ -1,0 +1,169 @@
+# Production stack: Postgres, Redis, MinIO, API, Celery, Nginx(frontend + /api proxy).
+#
+# 사전 준비:
+#   1) 프로젝트 루트에 `.env` 생성: `cp .env.compose.sample .env` 후 비밀번호 등 수정
+#   2) `cp backend/.env.example backend/.env` 후 Docker 서비스명·URL 반영
+#   3) 첫 기동: `docker compose -f docker-compose.prod.yml up -d --build`
+#
+# 접속: http://<호스트>:8080  (nginx → UI, /api → FastAPI)
+#
+#   Docker Compose V2에서 `minio-init` 완료 대기에 `service_completed_successfully` 사용.
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: ilt-prod-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-ilt}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ilt}
+      POSTGRES_DB: ${POSTGRES_DB:-ilt}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db_table.sql:/docker-entrypoint-initdb.d/001_init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ilt} -d ${POSTGRES_DB:-ilt}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    container_name: ilt-prod-redis
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  minio:
+    image: minio/minio:latest
+    container_name: ilt-prod-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minio123}
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  minio-init:
+    image: minio/mc:latest
+    container_name: ilt-prod-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        mc alias set local http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD" &&
+        mc mb -p "local/$$MINIO_BUCKET" || true &&
+        mc anonymous set private "local/$$MINIO_BUCKET" || true
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minio123}
+      MINIO_BUCKET: ${MINIO_BUCKET:-ilt-media}
+    restart: "no"
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: ilt-prod-api
+    restart: unless-stopped
+    command: >
+      sh -c "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    env_file:
+      - backend/.env
+    environment:
+      # compose의 `.env`(루트)와 동기화해 두면 DB·MinIO 비밀번호 일치. 아래는 Docker 네트워크용(호스트명 고정).
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-ilt}:${POSTGRES_PASSWORD:-ilt}@postgres:5432/${POSTGRES_DB:-ilt}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${POSTGRES_USER:-ilt}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-ilt}
+      DB_NAME: ${POSTGRES_DB:-ilt}
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minio}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minio123}
+      MINIO_BUCKET: ${MINIO_BUCKET:-ilt-media}
+      MINIO_SECURE: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8000/docs"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+
+  celery_worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: ilt-prod-celery
+    restart: unless-stopped
+    command: ["celery", "-A", "app.worker.celery_app", "worker", "-l", "info"]
+    env_file:
+      - backend/.env
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-ilt}:${POSTGRES_PASSWORD:-ilt}@postgres:5432/${POSTGRES_DB:-ilt}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${POSTGRES_USER:-ilt}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-ilt}
+      DB_NAME: ${POSTGRES_DB:-ilt}
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minio}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minio123}
+      MINIO_BUCKET: ${MINIO_BUCKET:-ilt-media}
+      MINIO_SECURE: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+      api:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: ilt-prod-web
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:

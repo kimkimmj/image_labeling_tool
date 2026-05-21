@@ -78,3 +78,14 @@ docker compose -f docker-compose.dev.yml down
 ```bash
 docker compose -f docker-compose.dev.yml down -v
 ```
+
+## 9) 프로덕션 스택 (단일 호스트, 선택)
+
+한 PC에서 API·Celery·프론트·인프라를 모두 띄울 때는 프로젝트 루트의 `docker-compose.prod.yml`을 사용한다.
+
+1. `cp .env.compose.sample .env` 후 DB/MinIO 비밀번호 등 수정  
+2. `cp backend/.env.example backend/.env` 후 `CORS_ORIGINS`, OAuth, `PUBLIC_APP_URL`을 **실제 접속 URL**(예: `http://172.16.100.57:8080`)로 맞춘다. (`backend/.env.example` 하단 주석 참고)  
+3. `docker compose -f docker-compose.prod.yml up -d --build`  
+4. 브라우저: `http://<호스트>:8080` — nginx가 UI를 서빙하고 `/api`는 FastAPI로 프록시한다.
+
+`minio-init` 완료 후에만 API가 기동한다(Docker Compose `service_completed_successfully`).
