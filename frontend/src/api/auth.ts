@@ -1,10 +1,12 @@
 import type { Me } from '../types/api'
 
+import { apiUrl } from './client'
+
 const jsonAccept = { Accept: 'application/json' } as const
 
 /** 세션 쿠키 기준 현재 사용자. 미로그인이면 `null`. */
 export async function fetchMe(): Promise<Me | null> {
-  const res = await fetch('/api/me', {
+  const res = await fetch(apiUrl('/api/me'), {
     credentials: 'include',
     headers: jsonAccept,
   })
@@ -15,7 +17,7 @@ export async function fetchMe(): Promise<Me | null> {
 
 /** Redis 세션 삭제 + 세션 쿠키 제거. */
 export async function logoutSession(): Promise<void> {
-  const res = await fetch('/api/auth/logout', {
+  const res = await fetch(apiUrl('/api/auth/logout'), {
     method: 'POST',
     credentials: 'include',
     headers: jsonAccept,
@@ -25,5 +27,5 @@ export async function logoutSession(): Promise<void> {
 
 /** 같은 출처 `/api` 프록시로 IdP 로그인 시작 (전체 페이지 이동). */
 export function startOAuthLogin(provider: 'google' | 'naver' | 'kakao'): void {
-  window.location.assign(`/api/auth/oauth/${provider}/login`)
+  window.location.assign(apiUrl(`/api/auth/oauth/${provider}/login`))
 }
