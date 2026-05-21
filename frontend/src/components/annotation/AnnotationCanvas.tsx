@@ -9,7 +9,7 @@
  * - 선택된 bbox Delete 키로 삭제
  */
 
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Image as KonvaImage, Layer, Rect, Stage, Transformer } from 'react-konva'
 import useImage from 'use-image'
 import type { LocalBbox } from '../../types/uploads'
@@ -214,8 +214,6 @@ export default function AnnotationCanvas({
                 }
                 node.scaleX(1)
                 node.scaleY(1)
-                const norm = normToStage(newPx, 1 / stageWidth, 1 / stageHeight)
-                // stageToNorm 대신 직접 계산
                 const nx = Math.max(0, Math.min(1, newPx.x / stageWidth))
                 const ny = Math.max(0, Math.min(1, newPx.y / stageHeight))
                 const nw = Math.max(0.001, Math.min(1 - nx, newPx.width / stageWidth))

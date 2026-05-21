@@ -4,7 +4,7 @@
  * 라우트: /images/:imageId/label?project_id=&upload_job_id=
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { fetchClasses } from '../api/projects'
 import {
@@ -13,7 +13,6 @@ import {
   fetchUploadJobImages,
   getImageContentUrl,
   patchAnnotations,
-  putAnnotations,
   transitionAssignmentStatus,
   type ParticipantScopeParam,
 } from '../api/uploads'
@@ -83,7 +82,7 @@ export function AnnotationPage() {
   const {
     bboxes, selectedLocalId, setSelectedLocalId,
     load, add, update, remove,
-    isDirty, computeDiff, computeAll, syncFromServer,
+    isDirty, computeDiff, syncFromServer,
   } = useAnnotationState()
 
   // ------------------------------------------------------------------
@@ -239,39 +238,6 @@ export function AnnotationPage() {
       if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current)
     }
   }, [bboxes, isDirty, assignment?.can_edit, savePatch])
-
-  // ------------------------------------------------------------------
-  // 수동 저장
-  // ------------------------------------------------------------------
-
-  const handleSavePut = useCallback(async () => {
-    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current)
-    setIsSaving(true)
-    try {
-      const all = computeAll()
-      const saved = await putAnnotations(imgId, {
-        annotations: all.map((b) => ({
-          class_id: b.class_id, x: b.x, y: b.y, width: b.width, height: b.height,
-        })),
-      }, participantScope)
-      syncFromServer(saved)
-      setAutoSaveStatus('saved')
-      setTimeout(() => setAutoSaveStatus('idle'), 2000)
-    } catch (e) {
-      alert('저장 실패: ' + String(e))
-    } finally {
-      setIsSaving(false)
-    }
-  }, [imgId, computeAll, syncFromServer, participantScope])
-
-  const handleSavePatch = useCallback(async () => {
-    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current)
-    setIsSaving(true)
-    const ok = await savePatch()
-    if (!ok) alert('저장 실패')
-    else { setAutoSaveStatus('saved'); setTimeout(() => setAutoSaveStatus('idle'), 2000) }
-    setIsSaving(false)
-  }, [savePatch])
 
   const handleSubmit = useCallback(async () => {
     if (!assignment) return

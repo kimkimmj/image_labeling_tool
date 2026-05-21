@@ -2,7 +2,7 @@
  * 우측 사이드바: 프로젝트 클래스 목록 + 선택 bbox 속성
  */
 
-import React, { useLayoutEffect, useRef } from 'react'
+import { useLayoutEffect, useRef } from 'react'
 import type { ProjectClass } from '../../types/projects'
 import type { LocalBbox } from '../../types/uploads'
 
