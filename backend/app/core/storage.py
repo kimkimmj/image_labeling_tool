@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import io
+from datetime import timedelta
 
 from minio import Minio
 from minio.error import S3Error
 
 from app.core.config import settings
+
+_EXPORT_PRESIGN_TTL = timedelta(hours=24)
 
 
 def _build_client() -> Minio:
@@ -77,6 +80,19 @@ class StorageClient:
             return True
         except S3Error:
             return False
+
+    def get_presigned_url(
+        self,
+        object_key: str,
+        *,
+        expires: timedelta = _EXPORT_PRESIGN_TTL,
+    ) -> str:
+        """다운로드용 presigned GET URL을 반환한다."""
+        return self._client.presigned_get_object(
+            self._bucket,
+            object_key,
+            expires=expires,
+        )
 
 
 def get_storage_client() -> StorageClient:

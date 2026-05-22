@@ -270,13 +270,13 @@ Table submission_comments {
 Table dataset_versions {
   id bigint [pk, increment]
   project_id bigint [not null, note: 'FK projects ON DELETE CASCADE']
-  version text [not null]
+  name text [not null]
   description text
   created_by bigint [not null, note: 'FK users']
   created_at timestamp [not null, default: `now()`]
 
   indexes {
-    (project_id, version) [unique, name: 'uq_dataset_version']
+    (project_id, name) [unique, name: 'uq_dataset_version']
   }
 }
 
@@ -289,6 +289,7 @@ Table dataset_items {
 
   indexes {
     dataset_version_id [name: 'idx_dataset_items_version']
+    (dataset_version_id, image_id) [unique, name: 'uq_dataset_item_version_image']
   }
 }
 
@@ -299,7 +300,7 @@ Table dataset_splits {
   train_ratio float [not null, note: 'chk_split_ratio: sum ratios = 100']
   val_ratio float [not null]
   test_ratio float [not null]
-  random_seed int
+  random_seed int [not null, default: 0]
   created_by bigint [not null, note: 'FK users']
   created_at timestamp [not null, default: `now()`]
 
@@ -309,13 +310,13 @@ Table dataset_splits {
 Table split_items {
   id bigint [pk, increment]
   split_id bigint [not null, note: 'FK dataset_splits ON DELETE CASCADE']
-  image_id bigint [not null, note: 'FK images']
-  assignment_id bigint [not null, note: 'FK image_assignments']
-  split_type text [not null]
+  dataset_item_id bigint [not null, note: 'FK dataset_items']
+  split_type text [not null, note: 'train | val | test']
   created_at timestamp [not null, default: `now()`]
 
   indexes {
     split_id [name: 'idx_split_items_split']
+    (split_id, dataset_item_id) [unique, name: 'uq_split_item_per_dataset_item']
   }
 }
 
@@ -326,6 +327,7 @@ Table export_jobs {
   split_id bigint [not null, note: 'FK dataset_splits']
   requested_by bigint [not null, note: 'FK users']
   status export_status [not null]
+  export_format text [not null, default: 'yolo', note: 'yolo | coco']
   export_path text
   error_message text
   created_at timestamp [not null, default: `now()`]
@@ -393,8 +395,7 @@ Ref: dataset_splits.dataset_version_id > dataset_versions.id [delete: cascade]
 Ref: dataset_splits.created_by > users.id
 
 Ref: split_items.split_id > dataset_splits.id [delete: cascade]
-Ref: split_items.image_id > images.id
-Ref: split_items.assignment_id > image_assignments.id
+Ref: split_items.dataset_item_id > dataset_items.id
 
 Ref: export_jobs.project_id > projects.id [delete: cascade]
 Ref: export_jobs.dataset_version_id > dataset_versions.id

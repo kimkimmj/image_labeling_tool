@@ -18,6 +18,7 @@ import { uploadMlModel } from '../api/mlModels'
 import { createUploadJob, deleteUploadJob, fetchUploadJobs } from '../api/uploads'
 import type { MlModel, ProjectClass, ProjectDetail, ProjectMember } from '../types/projects'
 import type { UploadJob } from '../types/uploads'
+import { DatasetExportPanel } from '../components/project/DatasetExportPanel'
 
 function statusLabel(status: string): string {
   const map: Record<string, string> = {
@@ -135,7 +136,7 @@ function UploadJobRowStats({ job, mode }: { job: UploadJob; mode: JobStatsMode }
   )
 }
 
-type ManageAccordionKey = 'upload' | 'members' | 'classes' | 'invite' | 'delete'
+type ManageAccordionKey = 'upload' | 'export' | 'members' | 'classes' | 'invite' | 'delete'
 
 function ManageAccordionPanel({
   panelId,
@@ -950,6 +951,15 @@ export function ProjectDetailPage() {
           </ManageAccordionPanel>
 
           <ManageAccordionPanel
+            panelId="export"
+            title="데이터셋 버전 · 분할 ·보내기"
+            open={openManageAccordion === 'export'}
+            onToggle={toggleManageAccordion}
+          >
+            <DatasetExportPanel projectId={id} />
+          </ManageAccordionPanel>
+
+          <ManageAccordionPanel
             panelId="members"
             title="멤버"
             open={openManageAccordion === 'members'}
@@ -1244,7 +1254,7 @@ export function ProjectDetailPage() {
 
       <p className="fine-print muted">
         {isOwner
-          ? '데이터 관리 탭에서는 아래 아코디언을 펼쳐 ZIP·멤버·클래스·초대·삭제를 설정할 수 있습니다.'
+          ? '데이터 관리 탭에서는 아래 아코디언을 펼쳐 ZIP·버전/보내기·멤버·클래스·초대·삭제를 설정할 수 있습니다.'
           : '멤버·초대·모델 설정은 프로젝트 owner만 변경할 수 있습니다.'}
       </p>
     </div>

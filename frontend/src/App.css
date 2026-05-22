@@ -904,6 +904,17 @@
   padding-top: 2px;
 }
 
+.dataset-export-panel__step {
+  font-size: 1rem;
+  margin: 0 0 8px;
+}
+
+.dataset-export-panel__hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 20px 0;
+}
+
 .upload-job-row {
   all: unset;
   cursor: pointer;

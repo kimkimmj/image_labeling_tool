@@ -1,34 +1,97 @@
-"""Export Celery 태스크 (Phase 5 — MVP 이후 구현 예정).
-
-계획:
-1. project_id, format("yolo_v8" | "coco") 를 파라미터로 받는다.
-2. DB에서 승인된(approved) annotation을 조회한다.
-3. 이미지를 MinIO에서 스트리밍으로 읽으면서 ZIP에 묶는다.
-4. YOLO v8 포맷:
-   - images/{split}/{filename}
-   - labels/{split}/{filename_stem}.txt  (class_index cx cy w h)
-   - data.yaml (class 목록, train/val paths)
-5. 결과 ZIP을 MinIO에 저장하고 presigned URL을 반환한다.
-
-현재는 stub만 정의합니다.
-"""
+"""Export Celery tasks — YOLO / COCO ZIP generation."""
 
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 
+from app.core.storage import StorageClient
+from app.db.session import SessionLocal
+from app.domains.export.repositories.export_repository import ExportRepository
+from app.domains.export.services.coco_export_generator import CocoExportGenerator
+from app.domains.export.services.yolo_export_generator import YoloExportGenerator
 from app.worker import celery_app
 
 logger = logging.getLogger(__name__)
 
 
-@celery_app.task(bind=True, name="app.tasks.export_tasks.run_export")
-def run_export(self: object, export_job_id: str, project_id: int, fmt: str) -> None:  # noqa: ANN001
-    """YOLO / COCO export 태스크 (Phase 5에서 구현)."""
-    logger.info(
-        "[Export %s] project_id=%d format=%s — Phase 5 구현 예정",
-        export_job_id,
-        project_id,
-        fmt,
-    )
-    raise NotImplementedError("export_tasks.run_export is planned for Phase 5")
+def _utc_naive_now() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+@celery_app.task(
+    bind=True,
+    name="app.tasks.export_tasks.run_export",
+    autoretry_for=(ConnectionError, TimeoutError, OSError),
+    retry_backoff=True,
+    retry_backoff_max=600,
+    max_retries=3,
+)
+def run_export(self, export_job_id: int, project_id: int) -> None:  # noqa: ANN001
+    """Generate dataset ZIP (YOLO or COCO) and upload to MinIO."""
+    db = SessionLocal()
+    repo = ExportRepository(db)
+    storage = StorageClient()
+
+    try:
+        job = repo.get_job_for_project(project_id=project_id, job_id=export_job_id)
+        if job is None:
+            logger.error("Export job %s not found for project %s", export_job_id, project_id)
+            return
+
+        repo.update_job_status(export_job_id, status="processing")
+        db.commit()
+
+        split_rows = repo.list_split_export_rows(job.split_id)
+        assignment_ids = list({r.assignment_id for r in split_rows})
+        annotations = repo.list_annotations_for_assignments(assignment_ids)
+        project_classes = repo.list_active_project_classes(project_id)
+
+        export_format = getattr(job, "export_format", "yolo") or "yolo"
+        if export_format == "coco":
+            generator = CocoExportGenerator(storage)
+        else:
+            generator = YoloExportGenerator(storage)
+
+        zip_bytes = generator.build_zip(
+            split_rows=split_rows,
+            annotations=annotations,
+            project_classes=project_classes,
+        )
+
+        object_key = f"exports/{project_id}/{export_job_id}.zip"
+        storage.upload_bytes(object_key, zip_bytes, content_type="application/zip")
+
+        repo.update_job_status(
+            export_job_id,
+            status="completed",
+            export_path=object_key,
+            error_message=None,
+            completed_at=_utc_naive_now(),
+        )
+        db.commit()
+        logger.info(
+            "Export job %s completed (%s): %s",
+            export_job_id,
+            export_format,
+            object_key,
+        )
+
+    except Exception as exc:
+        db.rollback()
+        logger.exception("Export job %s failed (retry %s)", export_job_id, self.request.retries)
+        if self.request.retries >= self.max_retries:
+            try:
+                repo.update_job_status(
+                    export_job_id,
+                    status="failed",
+                    error_message=str(exc)[:2000],
+                    completed_at=_utc_naive_now(),
+                )
+                db.commit()
+            except Exception:
+                db.rollback()
+            return
+        raise self.retry(exc=exc) from exc
+    finally:
+        db.close()

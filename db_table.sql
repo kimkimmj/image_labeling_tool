@@ -417,7 +417,7 @@ CREATE TABLE dataset_versions (
 
   project_id BIGINT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
 
-  version TEXT NOT NULL,
+  name TEXT NOT NULL,
 
   description TEXT,
 
@@ -426,7 +426,7 @@ CREATE TABLE dataset_versions (
   created_at TIMESTAMP NOT NULL DEFAULT NOW(),
 
   CONSTRAINT uq_dataset_version
-    UNIQUE(project_id, version)
+    UNIQUE(project_id, name)
 );
 
 -- =========================================================
@@ -442,7 +442,10 @@ CREATE TABLE dataset_items (
 
   assignment_id BIGINT NOT NULL REFERENCES image_assignments(id),
 
-  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+
+  CONSTRAINT uq_dataset_item_version_image
+    UNIQUE(dataset_version_id, image_id)
 );
 
 -- =========================================================
@@ -462,7 +465,7 @@ CREATE TABLE dataset_splits (
 
   test_ratio FLOAT NOT NULL,
 
-  random_seed INT,
+  random_seed INT NOT NULL DEFAULT 0,
 
   created_by BIGINT NOT NULL REFERENCES users(id),
 
@@ -483,13 +486,17 @@ CREATE TABLE split_items (
 
   split_id BIGINT NOT NULL REFERENCES dataset_splits(id) ON DELETE CASCADE,
 
-  image_id BIGINT NOT NULL REFERENCES images(id),
-
-  assignment_id BIGINT NOT NULL REFERENCES image_assignments(id),
+  dataset_item_id BIGINT NOT NULL REFERENCES dataset_items(id),
 
   split_type TEXT NOT NULL,
 
-  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+
+  CONSTRAINT chk_split_type
+    CHECK (split_type IN ('train', 'val', 'test')),
+
+  CONSTRAINT uq_split_item_per_dataset_item
+    UNIQUE(split_id, dataset_item_id)
 );
 
 -- =========================================================
@@ -509,13 +516,18 @@ CREATE TABLE export_jobs (
 
   status export_status NOT NULL,
 
+  export_format TEXT NOT NULL DEFAULT 'yolo',
+
   export_path TEXT,
 
   error_message TEXT,
 
   created_at TIMESTAMP NOT NULL DEFAULT NOW(),
 
-  completed_at TIMESTAMP
+  completed_at TIMESTAMP,
+
+  CONSTRAINT chk_export_format
+    CHECK (export_format IN ('yolo', 'coco'))
 );
 
 -- =========================================================
